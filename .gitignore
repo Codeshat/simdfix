@@ -1,0 +1,11 @@
+build/
+out/
+.cache/
+compile_commands.json
+corpus/
+*.o
+*.a
+*.so
+perf.data*
+callgrind.out.*
+.DS_Store

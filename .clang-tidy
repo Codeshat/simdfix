@@ -1,0 +1,72 @@
+# simdfix is a zero-allocation, header-only parsing library. The checks below are
+# tuned for that: pointer arithmetic and C arrays are the job, not a smell, but
+# anything that can allocate, throw, or narrow silently on the parse path is.
+#
+# On the disabled macro checks: they are not applicable here rather than merely
+# inconvenient. SIMDFIX_TARGET_AVX2 expands to __attribute__((target("avx2"))),
+# which has no constexpr equivalent; SIMDFIX_HAS_AVX2 and SIMDFIX_X86 gate
+# #include <immintrin.h> and so must be preprocessor-visible; and the
+# SIMDFIX_VERSION_* macros exist precisely so downstream builds can test them
+# with #if, which an enum cannot do.
+#
+# portability-simd-intrinsics is off because it flags every `_mm256_*` call and
+# suggests std::experimental::simd instead. Hand-written ISA-specific kernels
+# behind runtime dispatch are the point of this library, not an oversight: the
+# portable fallback exists (checksum_scalar, find_byte_naive), is the definition
+# of correctness the intrinsics are differentially fuzzed against, and is what
+# detail::has_avx2() selects on a CPU without AVX2. The intrinsics are confined
+# to SIMDFIX_TARGET_AVX2 functions guarded by #if SIMDFIX_HAS_AVX2.
+#
+# readability-redundant-member-init is off because it fires only on class-type
+# members (`std::string_view value{}`) and not on scalars (`std::uint32_t tag{}`),
+# so obeying it would make initialisation look inconsistent within one struct.
+# Writing `{}` on every member is deliberate: it makes "is this initialised?"
+# answerable by looking at the declaration alone.
+#
+# tests/ carries its own .clang-tidy relaxing the checks that misfire on Catch2.
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -bugprone-easily-swappable-parameters,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-macro-to-enum,
+  -cppcoreguidelines-macro-usage,
+  -modernize-macro-to-enum,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-vararg,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
+  -modernize-use-trailing-return-type,
+  -portability-simd-intrinsics,
+  -readability-redundant-member-init,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'include/simdfix/.*\.hpp$'
+FormatStyle: file
+
+CheckOptions:
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: lower_case
+  readability-identifier-naming.StructCase: lower_case
+  readability-identifier-naming.EnumCase: lower_case
+  readability-identifier-naming.EnumConstantCase: lower_case
+  readability-identifier-naming.FunctionCase: lower_case
+  readability-identifier-naming.VariableCase: lower_case
+  readability-identifier-naming.PrivateMemberSuffix: '_'
+  readability-identifier-naming.ConstexprVariableCase: lower_case
+  readability-identifier-naming.GlobalConstantCase: lower_case
+  readability-identifier-naming.MacroDefinitionCase: UPPER_CASE
+  readability-function-cognitive-complexity.Threshold: 30

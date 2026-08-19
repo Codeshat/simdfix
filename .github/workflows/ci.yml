@@ -1,0 +1,147 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_COLOR_DIAGNOSTICS: "ON"
+
+jobs:
+  test:
+    name: ${{ matrix.compiler }} / ${{ matrix.preset }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc-13, clang-19]
+        preset: [debug-san, release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+          if [ "${{ matrix.compiler }}" = "gcc-13" ]; then
+            sudo apt-get install -y g++-13
+            echo "CC=gcc-13"  >> "$GITHUB_ENV"
+            echo "CXX=g++-13" >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y clang-19
+            echo "CC=clang-19"    >> "$GITHUB_ENV"
+            echo "CXX=clang++-19" >> "$GITHUB_ENV"
+          fi
+
+      - name: Cache FetchContent dependencies
+        uses: actions/cache@v4
+        with:
+          path: build/${{ matrix.preset }}/_deps
+          key: deps-${{ matrix.compiler }}-${{ matrix.preset }}-${{ hashFiles('**/CMakeLists.txt') }}
+          restore-keys: deps-${{ matrix.compiler }}-${{ matrix.preset }}-
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+      # simdfix picks its kernels at run time, so CI must prove the scalar path
+      # is exercised too. Without this, a scalar-only regression would ship
+      # green from every AVX2-capable runner.
+      - name: Test with AVX2 disabled
+        env:
+          SIMDFIX_DISABLE_AVX2: "1"
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+  benchmarks:
+    name: benchmarks build and run
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build g++-13
+
+      - name: Configure
+        env:
+          CC: gcc-13
+          CXX: g++-13
+        run: cmake --preset release
+
+      - name: Build
+        run: cmake --build --preset release
+
+      # Not a performance gate -- shared CI runners are far too noisy for that,
+      # and a flaky perf threshold trains everyone to ignore red. This only
+      # proves the benchmarks still compile, link against hffix, and run to
+      # completion, so `--benchmark_min_time` is deliberately tiny.
+      - name: Smoke-run benchmarks
+        run: ./build/release/bin/simdfix_bench --benchmark_min_time=0.01s
+
+  fuzz:
+    name: fuzz smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang-19
+
+      - name: Configure
+        env:
+          CC: clang-19
+          CXX: clang++-19
+        run: cmake --preset fuzz
+
+      - name: Build
+        run: cmake --build --preset fuzz
+
+      - name: Generate seed corpus
+        run: |
+          cmake --preset release -DSIMDFIX_BUILD_BENCH=OFF
+          cmake --build --preset release --target gen_corpus
+          mkdir -p seeds
+          ./build/release/bin/gen_corpus --count 64 --split seeds --out /dev/null
+
+      - name: Fuzz the parser
+        run: ./build/fuzz/bin/fuzz_parse -max_total_time=60 -print_final_stats=1 seeds
+
+      - name: Fuzz the kernels
+        run: ./build/fuzz/bin/fuzz_kernels -max_total_time=60 -print_final_stats=1 seeds
+
+  lint:
+    name: format and clang-tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang-19 clang-format-19 clang-tidy-19
+
+      - name: clang-format
+        run: |
+          find include tests bench tools fuzz -name '*.hpp' -o -name '*.cpp' \
+            | xargs clang-format-19 --dry-run --Werror
+
+      - name: Configure for a compilation database
+        env:
+          CC: clang-19
+          CXX: clang++-19
+        run: cmake --preset release
+
+      - name: clang-tidy
+        run: |
+          find include tests tools fuzz -name '*.hpp' -o -name '*.cpp' \
+            | xargs clang-tidy-19 -p build/release --warnings-as-errors='*'

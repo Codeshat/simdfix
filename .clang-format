@@ -1,0 +1,37 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++20
+
+ColumnLimit: 100
+IndentWidth: 2
+AccessModifierOffset: -1
+
+AllowShortFunctionsOnASingleLine: Inline
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: false
+BinPackParameters: false
+DerivePointerAlignment: false
+PointerAlignment: Left
+SeparateDefinitionBlocks: Always
+SpaceAfterTemplateKeyword: false
+
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Four groups only. Splitting <cstddef> from <string> is a distinction without
+  # a difference and just adds blank lines to every file.
+  #
+  # Project headers sort last so that a header which forgets one of its own
+  # includes fails loudly rather than being rescued by an earlier include.
+  - Regex: '^<(immintrin|x86intrin|emmintrin)\.h>$'
+    Priority: 1
+  # hffix ships a top-level <hffix.hpp> with no directory component, so it has
+  # to be named before the standard-library rule or it sorts in with <cstdint>.
+  - Regex: '^<hffix'
+    Priority: 3
+  - Regex: '^<[^/]+>$' # standard library
+    Priority: 2
+  - Regex: '^<.*>$' # third party: catch2, benchmark, hffix
+    Priority: 3
+  - Regex: '.*' # simdfix and test/bench support headers
+    Priority: 4

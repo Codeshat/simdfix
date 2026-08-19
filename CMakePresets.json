@@ -1,0 +1,129 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "SIMDFIX_WERROR": "ON"
+      }
+    },
+    {
+      "name": "debug-san",
+      "inherits": "base",
+      "displayName": "Debug + ASan/UBSan",
+      "description": "-O1 -g with address+undefined sanitizers. The default development preset.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS_DEBUG": "-O1 -g -fno-omit-frame-pointer",
+        "SIMDFIX_SANITIZE": "address;undefined",
+        "SIMDFIX_BUILD_TESTS": "ON",
+        "SIMDFIX_BUILD_BENCH": "OFF",
+        "SIMDFIX_BUILD_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug (no sanitizers)",
+      "description": "Plain -O0 -g, for stepping through in a debugger without ASan noise.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SIMDFIX_BUILD_TESTS": "ON",
+        "SIMDFIX_BUILD_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release (portable)",
+      "description": "-O3 -DNDEBUG, baseline x86-64. AVX2 is reached via runtime dispatch, not -march.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SIMDFIX_BUILD_TESTS": "ON",
+        "SIMDFIX_BUILD_BENCH": "ON",
+        "SIMDFIX_BUILD_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "release-native",
+      "inherits": "release",
+      "displayName": "Release + -march=native (BENCHMARKS ONLY)",
+      "description": "Upper-bound numbers on this exact CPU. Binaries from this preset are not portable; do not distribute them.",
+      "cacheVariables": {
+        "SIMDFIX_NATIVE": "ON"
+      }
+    },
+    {
+      "name": "relwithdebinfo",
+      "inherits": "base",
+      "displayName": "RelWithDebInfo",
+      "description": "Optimised with frame pointers, for perf/vtune profiling.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O2 -g -DNDEBUG -fno-omit-frame-pointer",
+        "SIMDFIX_BUILD_BENCH": "ON",
+        "SIMDFIX_BUILD_TOOLS": "ON"
+      }
+    },
+    {
+      "name": "fuzz",
+      "inherits": "base",
+      "displayName": "libFuzzer + ASan/UBSan (Clang only)",
+      "description": "Requires Clang >= 19; set CC/CXX first, e.g. CC=clang-19 CXX=clang++-19 cmake --preset fuzz",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "SIMDFIX_BUILD_FUZZERS": "ON",
+        "SIMDFIX_BUILD_TESTS": "OFF",
+        "SIMDFIX_BUILD_BENCH": "OFF",
+        "SIMDFIX_SANITIZE": "address;undefined"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "debug-san", "configurePreset": "debug-san" },
+    { "name": "debug", "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" },
+    { "name": "release-native", "configurePreset": "release-native" },
+    { "name": "relwithdebinfo", "configurePreset": "relwithdebinfo" },
+    { "name": "fuzz", "configurePreset": "fuzz" }
+  ],
+
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "stopOnFailure": false }
+    },
+    { "name": "debug-san", "inherits": "base", "configurePreset": "debug-san" },
+    { "name": "debug", "inherits": "base", "configurePreset": "debug" },
+    { "name": "release", "inherits": "base", "configurePreset": "release" }
+  ],
+
+  "workflowPresets": [
+    {
+      "name": "ci",
+      "description": "Configure, build and test the sanitizer preset in one command.",
+      "steps": [
+        { "type": "configure", "name": "debug-san" },
+        { "type": "build", "name": "debug-san" },
+        { "type": "test", "name": "debug-san" }
+      ]
+    },
+    {
+      "name": "bench",
+      "description": "Build the native-optimised benchmark binaries.",
+      "steps": [
+        { "type": "configure", "name": "release-native" },
+        { "type": "build", "name": "release-native" }
+      ]
+    }
+  ]
+}

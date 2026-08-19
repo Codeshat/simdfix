@@ -1,0 +1,41 @@
+# clangd picks up compile_commands.json from the repo root; the CMake build
+# symlinks it there (see the top-level CMakeLists.txt). Configure a preset once
+#   cmake --preset debug-san
+# and the linter is live in your editor.
+#
+# REQUIRES clangd >= 19. libstdc++ gates <expected> on __cpp_concepts >= 202002L,
+# and Clang only began defining that in 19 -- so clangd-18 reports every use of
+# std::expected as an error even though GCC compiles the file cleanly. If you are
+# stuck on clangd-18, uncommenting the -D below restores indexing; it is a lie
+# told to the header guard, not something the real build ever sees.
+CompileFlags:
+  Add:
+    - -std=c++23
+    # - -D__cpp_concepts=202002L  # clangd-18 only; prefer installing clangd-19
+    # Let clangd analyse the AVX2 kernels. The shipped binaries do NOT get this;
+    # they use __attribute__((target("avx2"))) plus runtime dispatch. This flag
+    # only teaches the indexer that <immintrin.h> intrinsics exist.
+    - -mavx2
+    - -Wall
+    - -Wextra
+  Remove:
+    # GCC-only flags that clang's driver rejects.
+    - -fno-var-tracking-assignments
+    - -mno-direct-extern-access
+
+Diagnostics:
+  UnusedIncludes: Strict
+  MissingIncludes: None
+  ClangTidy:
+    # clang-tidy runs from .clang-tidy; keep the editor loop fast by skipping the
+    # slowest checks there. CI still runs the full set.
+    Remove:
+      - readability-function-cognitive-complexity
+
+InlayHints:
+  Enabled: true
+  ParameterNames: true
+  DeducedTypes: true
+
+Hover:
+  ShowAKA: true

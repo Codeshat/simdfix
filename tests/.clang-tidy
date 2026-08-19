@@ -1,0 +1,46 @@
+# Test-specific relaxations, inheriting everything else from the repo root.
+#
+# Each of these is disabled because the check is measuring the wrong thing in a
+# Catch2 test, not because the tests are exempt from standards.
+---
+InheritParentConfig: true
+Checks: >
+  -readability-function-cognitive-complexity,
+  -cert-msc32-c,
+  -cert-msc51-cpp,
+  -modernize-use-designated-initializers,
+  -cppcoreguidelines-avoid-do-while,
+  -readability-container-size-empty,
+  -bugprone-unchecked-optional-access,
+
+# Why each:
+#
+#   readability-function-cognitive-complexity
+#     Catch2 compiles every SECTION into one generated function, so a test case
+#     with six sections is reported as a single 60-complexity function that does
+#     not exist in the source. Splitting the sweeps into helpers to satisfy the
+#     metric would make the tests harder to read, not easier.
+#
+#   cert-msc32-c / cert-msc51-cpp  ("RNG seeded with a constant")
+#     Constant seeds are the entire point. A benchmark or a kernel-equivalence
+#     sweep that generated different data on each run would not be reproducible,
+#     and a fuzz failure could not be replayed. Randomness belongs in the fuzzer,
+#     which has a real entropy source.
+#
+#   modernize-use-designated-initializers
+#     `field{55, "AAPL"}` reads better than `field{.tag = 55, .value = "AAPL"}`
+#     when it appears a hundred times in expected-value tables. Library code
+#     still uses designated initializers.
+#
+#   cppcoreguidelines-avoid-do-while
+#     Catch2's assertion macros expand to do/while(0).
+#
+#   readability-container-size-empty
+#     Tests deliberately assert on .size() == 0 to check the exact value rather
+#     than the emptiness predicate.
+#
+#   bugprone-unchecked-optional-access
+#     The check cannot see through Catch2's REQUIRE, so
+#     `REQUIRE(o.has_value()); CHECK(*o == x);` is reported as unchecked even
+#     though REQUIRE aborts the test case on failure. Library code keeps the
+#     check enabled, where it is genuinely useful.
